@@ -102,20 +102,6 @@ macro_rules! println {
     ($($arg:tt)*) => ($crate::old_io::stdio::println_args(format_args!($($arg)*)))
 }
 
-/// Helper macro for unwrapping `Result` values while returning early with an
-/// error if the value of the expression is `Err`. For more information, see
-/// `std::io`.
-#[macro_export]
-#[stable(feature = "rust1", since = "1.0.0")]
-macro_rules! try {
-    ($expr:expr) => (match $expr {
-        $crate::result::Result::Ok(val) => val,
-        $crate::result::Result::Err(err) => {
-            return $crate::result::Result::Err($crate::error::FromError::from_error(err))
-        }
-    })
-}
-
 /// A macro to select an event from a number of receivers.
 ///
 /// This macro is used to wait for the first event to occur on a number of

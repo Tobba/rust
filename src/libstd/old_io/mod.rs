@@ -246,6 +246,7 @@ pub use self::FileAccess::*;
 pub use self::IoErrorKind::*;
 
 use char::CharExt;
+use core::str as core_str;
 use default::Default;
 use error::Error;
 use fmt;
@@ -266,7 +267,6 @@ use str::StrExt;
 use str;
 use string::String;
 use uint;
-use unicode;
 use vec::Vec;
 
 // Reexports
@@ -1483,7 +1483,7 @@ pub trait Buffer: Reader {
     /// valid utf-8 encoded codepoint as the next few bytes in the stream.
     fn read_char(&mut self) -> IoResult<char> {
         let first_byte = try!(self.read_byte());
-        let width = unicode::str::utf8_char_width(first_byte);
+        let width = core_str::utf8_char_width(first_byte);
         if width == 1 { return Ok(first_byte as char) }
         if width == 0 { return Err(standard_error(InvalidInput)) } // not utf8
         let mut buf = [first_byte, 0, 0, 0];

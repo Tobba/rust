@@ -263,3 +263,12 @@ impl<'a, T, B: ?Sized> fmt::Display for Cow<'a, T, B> where
         }
     }
 }
+
+/// A helper structure whose sole purpose is to contain an inner reference.
+///
+/// This structure is often returned from methods called `by_ref` on iterators,
+/// readers, and writers.
+pub struct ByRef<'a, T: ?Sized + 'a> {
+    /// The contained reference in this structure.
+    pub inner: &'a mut T,
+}

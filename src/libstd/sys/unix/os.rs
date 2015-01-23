@@ -67,37 +67,16 @@ pub fn errno() -> int {
 
 /// Get a detailed string description for the given error number
 pub fn error_string(errno: i32) -> String {
-    #[cfg(any(target_os = "macos",
-              target_os = "ios",
-              target_os = "android",
-              target_os = "freebsd",
-              target_os = "dragonfly"))]
-    fn strerror_r(errnum: c_int, buf: *mut c_char, buflen: libc::size_t)
-                  -> c_int {
-        extern {
-            fn strerror_r(errnum: c_int, buf: *mut c_char,
-                          buflen: libc::size_t) -> c_int;
-        }
-        unsafe {
-            strerror_r(errnum, buf, buflen)
-        }
-    }
-
-    // GNU libc provides a non-compliant version of strerror_r by default
-    // and requires macros to instead use the POSIX compliant variant.
-    // So we just use __xpg_strerror_r which is always POSIX compliant
     #[cfg(target_os = "linux")]
-    fn strerror_r(errnum: c_int, buf: *mut c_char,
-                  buflen: libc::size_t) -> c_int {
-        extern {
-            fn __xpg_strerror_r(errnum: c_int,
-                                buf: *mut c_char,
-                                buflen: libc::size_t)
-                                -> c_int;
-        }
-        unsafe {
-            __xpg_strerror_r(errnum, buf, buflen)
-        }
+    extern {
+        #[link_name = "__xpg_strerror_r"]
+        fn strerror_r(errnum: c_int, buf: *mut c_char,
+                      buflen: libc::size_t) -> c_int;
+    }
+    #[cfg(not(target_os = "linux"))]
+    extern {
+        fn strerror_r(errnum: c_int, buf: *mut c_char,
+                      buflen: libc::size_t) -> c_int;
     }
 
     let mut buf = [0 as c_char; TMPBUF_SZ];

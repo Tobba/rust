@@ -17,20 +17,20 @@
 //! methods to perform operations such as `zip`, `chain`, `enumerate`, and `fold`.
 //!
 //! The goal of this module is to unify iteration across all containers in Rust.
-//! An iterator can be considered as a state machine which is used to track which
-//! element will be yielded next.
+//! An iterator can be considered as a state machine which is used to track
+//! which element will be yielded next.
 //!
-//! There are various extensions also defined in this module to assist with various
-//! types of iteration, such as the `DoubleEndedIterator` for iterating in reverse,
-//! the `FromIterator` trait for creating a container from an iterator, and much
-//! more.
+//! There are various extensions also defined in this module to assist with
+//! various types of iteration, such as the `DoubleEndedIterator` for iterating
+//! in reverse, the `FromIterator` trait for creating a container from an
+//! iterator, and much more.
 //!
 //! ## Rust's `for` loop
 //!
 //! The special syntax used by rust's `for` loop is based around the `Iterator`
-//! trait defined in this module. For loops can be viewed as a syntactical expansion
-//! into a `loop`, for example, the `for` loop in this example is essentially
-//! translated to the `loop` below.
+//! trait defined in this module. For loops can be viewed as a syntactical
+//! expansion into a `loop`, for example, the `for` loop in this example is
+//! essentially translated to the `loop` below.
 //!
 //! ```
 //! let values = vec![1, 2, 3];
@@ -58,16 +58,16 @@
 
 use self::MinMaxResult::*;
 
+use borrow::ByRef;
 use clone::Clone;
-use cmp;
 use cmp::Ord;
+use cmp;
 use default::Default;
+use marker::Sized;
 use mem;
 use num::{ToPrimitive, Int};
 use ops::{Add, Deref, FnMut};
-use option::Option;
-use option::Option::{Some, None};
-use std::marker::Sized;
+use option::Option::{self, Some, None};
 use usize;
 
 /// An interface for dealing with "external iterators". These types of iterators
@@ -94,8 +94,8 @@ pub trait Iterator {
 
     /// Returns a lower and upper bound on the remaining length of the iterator.
     ///
-    /// An upper bound of `None` means either there is no known upper bound, or the upper bound
-    /// does not fit within a `usize`.
+    /// An upper bound of `None` means either there is no known upper bound, or
+    /// the upper bound does not fit within a `usize`.
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
     fn size_hint(&self) -> (usize, Option<usize>) { (0, None) }
@@ -555,8 +555,8 @@ pub trait IteratorExt: Iterator + Sized {
     /// assert!(it.next() == Some(5));
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
-    fn by_ref<'r>(&'r mut self) -> ByRef<'r, Self> {
-        ByRef{iter: self}
+    fn by_ref(&mut self) -> ByRef<Self> {
+        ByRef { inner: self }
     }
 
     /// Loops through the entire iterator, collecting all of the elements into
@@ -1126,27 +1126,20 @@ impl<I> RandomAccessIterator for Rev<I> where I: DoubleEndedIterator + RandomAcc
     }
 }
 
-/// A mutable reference to an iterator
-#[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
-#[stable(feature = "rust1", since = "1.0.0")]
-pub struct ByRef<'a, I:'a> {
-    iter: &'a mut I,
-}
-
 #[stable(feature = "rust1", since = "1.0.0")]
 impl<'a, I> Iterator for ByRef<'a, I> where I: 'a + Iterator {
     type Item = <I as Iterator>::Item;
 
     #[inline]
-    fn next(&mut self) -> Option<<I as Iterator>::Item> { self.iter.next() }
+    fn next(&mut self) -> Option<<I as Iterator>::Item> { self.inner.next() }
     #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) { self.iter.size_hint() }
+    fn size_hint(&self) -> (usize, Option<usize>) { self.inner.size_hint() }
 }
 
 #[stable(feature = "rust1", since = "1.0.0")]
 impl<'a, I> DoubleEndedIterator for ByRef<'a, I> where I: 'a + DoubleEndedIterator {
     #[inline]
-    fn next_back(&mut self) -> Option<<I as Iterator>::Item> { self.iter.next_back() }
+    fn next_back(&mut self) -> Option<<I as Iterator>::Item> { self.inner.next_back() }
 }
 
 #[stable(feature = "rust1", since = "1.0.0")]

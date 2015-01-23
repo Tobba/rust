@@ -150,17 +150,15 @@ macro_rules! debug_assert_eq {
     ($($arg:tt)*) => (if cfg!(not(ndebug)) { assert_eq!($($arg)*); })
 }
 
-/// Short circuiting evaluation on Err
-///
-/// `libstd` contains a more general `try!` macro that uses `FromError`.
+/// Helper macro for unwrapping `Result` values while returning early with an
+/// error if the value of the expression is `Err`. For more information, see
+/// `std::io`.
 #[macro_export]
 macro_rules! try {
-    ($e:expr) => ({
-        use $crate::result::Result::{Ok, Err};
-
-        match $e {
-            Ok(e) => e,
-            Err(e) => return Err(e),
+    ($e:expr) => (match $e {
+        $crate::result::Result::Ok(val) => val,
+        $crate::result::Result::Err(err) => {
+            return $crate::result::Result::Err($crate::error::FromError::from_error(err))
         }
     })
 }

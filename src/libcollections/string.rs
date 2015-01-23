@@ -25,6 +25,7 @@ use core::iter::FromIterator;
 use core::mem;
 use core::ops::{self, Deref, Add, Index};
 use core::ptr;
+use core::str as core_str;
 use core::raw::Slice as RawSlice;
 use unicode::str as unicode_str;
 use unicode::str::Utf16Item;
@@ -199,7 +200,7 @@ impl String {
             if byte < 128u8 {
                 // subseqidx handles this
             } else {
-                let w = unicode_str::utf8_char_width(byte);
+                let w = core_str::utf8_char_width(byte);
 
                 match w {
                     2 => {

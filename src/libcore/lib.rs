@@ -140,6 +140,8 @@ pub mod str;
 pub mod hash;
 pub mod fmt;
 pub mod error;
+pub mod io;
+pub mod void;
 
 // note: does not need to be public
 mod tuple;

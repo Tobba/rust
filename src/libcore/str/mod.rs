@@ -1115,6 +1115,12 @@ static UTF8_CHAR_WIDTH: [u8; 256] = [
 4,4,4,4,4,0,0,0,0,0,0,0,0,0,0,0, // 0xFF
 ];
 
+/// Given a first byte, determine how many bytes are in this UTF-8 character
+#[inline]
+pub fn utf8_char_width(b: u8) -> uint {
+    return UTF8_CHAR_WIDTH[b as uint] as uint;
+}
+
 /// Struct that contains a `char` and the index of the first byte of
 /// the next `char` in a string.  This can be used as a data structure
 /// for iterating over the UTF-8 bytes of a string.

@@ -135,7 +135,7 @@ extern crate log;
 
 #[macro_use]
 #[macro_reexport(assert, assert_eq, debug_assert, debug_assert_eq,
-    unreachable, unimplemented, write, writeln)]
+                 unreachable, unimplemented, write, writeln, try)]
 extern crate core;
 
 #[macro_use]
@@ -178,6 +178,7 @@ pub use core::simd;
 pub use core::result;
 pub use core::option;
 pub use core::error;
+pub use core::void;
 
 #[cfg(not(test))] pub use alloc::boxed;
 pub use alloc::rc;
@@ -253,6 +254,7 @@ pub mod os;
 pub mod path;
 pub mod rand;
 pub mod time;
+pub mod io;
 
 /* Common data structures */
 
