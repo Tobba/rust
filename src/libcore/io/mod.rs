@@ -81,7 +81,7 @@ pub trait ReadExt: Read + Sized {
     fn chars(self) -> Chars<Self> {
         Chars { inner: self }
     }
-    fn chain<R: Read, Err = Self::Err>(self, next: R) -> Chain<Self, R, Err>
+    fn chain<R: Read, Err=Self::Err>(self, next: R) -> Chain<Self, R, Err>
         where Err: FromError<Self::Err>,
               Err: FromError<R::Err>,
     {
@@ -90,8 +90,10 @@ pub trait ReadExt: Read + Sized {
     fn take(self, limit: u64) -> Take<Self> {
         Take { inner: self, limit: limit }
     }
-    fn tee<W: Write<Err=Self::Err>>(self, out: W) -> Tee<Self, W>
-        where W::Err: FromError<EndOfFile>
+    fn tee<W: Write, Err=Self::Err>(self, out: W) -> Tee<Self, W, Err>
+        where Err: FromError<Self::Err>,
+              Err: FromError<W::Err>,
+              Err: FromError<EndOfFile>
     {
         Tee { reader: self, writer: out }
     }
@@ -159,8 +161,9 @@ pub struct EndOfFile;
 
 #[allow(missing_docs)] // docs in std::io
 pub trait WriteExt: Write + Sized {
-    fn write_all(&mut self, mut buf: &[u8]) -> Result<(), Self::Err>
-        where Self::Err: FromError<EndOfFile>
+    fn write_all<Err=Self::Err>(&mut self, mut buf: &[u8]) -> Result<(), Err>
+        where Err: FromError<Self::Err>,
+              Err: FromError<EndOfFile>
     {
         while buf.len() > 0 {
             let n = try!(self.write(buf));
@@ -169,8 +172,9 @@ pub trait WriteExt: Write + Sized {
         }
         Ok(())
     }
-    fn write_fmt(&mut self, fmt: fmt::Arguments) -> Result<(), Self::Err>
-        where Self::Err: FromError<EndOfFile>
+    fn write_fmt<Err=Self::Err>(&mut self, fmt: fmt::Arguments) -> Result<(), Err>
+        where Err: FromError<Self::Err>,
+              Err: FromError<EndOfFile>
     {
         // Create a shim which translates a Writer to a fmt::Writer and saves
         // off I/O errors. instead of discarding them
@@ -179,8 +183,9 @@ pub trait WriteExt: Write + Sized {
             error: Result<(), E>,
         }
 
-        impl<'a, T: Write> fmt::Writer for Adaptor<'a, T, T::Err>
-            where T::Err: FromError<EndOfFile>
+        impl<'a, T: Write, Frr> fmt::Writer for Adaptor<'a, T, Frr>
+            where Frr: FromError<T::Err>,
+                  Frr: FromError<EndOfFile>
         {
             fn write_str(&mut self, s: &str) -> fmt::Result {
                 match self.inner.write_all(s.as_bytes()) {
@@ -208,8 +213,10 @@ pub trait WriteExt: Write + Sized {
     fn upcast_err<E: FromError<Self::Err>>(self) -> UpcastErr<Self, E> {
         UpcastErr { inner: self }
     }
-    fn broadcast<W: Write<Err=Self::Err>>(self, other: W) -> Broadcast<Self, W>
-        where Self::Err: FromError<EndOfFile>
+    fn broadcast<W: Write, Err=Self::Err>(self, other: W) -> Broadcast<Self, W, Err>
+        where Err: FromError<Self::Err>,
+              Err: FromError<W::Err>,
+              Err: FromError<EndOfFile>
     {
         Broadcast { first: self, second: other }
     }
@@ -330,25 +337,29 @@ impl<'a, W: Write> Write for &'a mut W {
 /// A `Write` adaptor which will write data to multiple locations.
 ///
 /// For more information, see `WriteExt::broadcast`.
-pub struct Broadcast<T, U> {
+pub struct Broadcast<T, U, Err> {
     first: T,
     second: U,
 }
 
-impl<T: Write, U: Write<Err=T::Err>> Write for Broadcast<T, U>
-    where T::Err: FromError<EndOfFile>
+impl<T: Write, U: Write, Err> Write for Broadcast<T, U, Err>
+    where Err: FromError<T::Err>,
+          Err: FromError<U::Err>,
+          Err: FromError<EndOfFile>
 {
-    type Err = T::Err;
+    type Err = Err;
 
-    fn write(&mut self, data: &[u8]) -> Result<usize, T::Err> {
+    fn write(&mut self, data: &[u8]) -> Result<usize, Err> {
         let n = try!(self.first.write(data));
         // TODO: what if the write fails? (we wrote something)
-        try!(self.second.write_all(&data[..n]));
+        try!(self.second.write_all::<Err>(&data[..n]));
         Ok(n)
     }
 
-    fn flush(&mut self) -> Result<(), T::Err> {
-        self.first.flush().and(self.second.flush())
+    fn flush(&mut self) -> Result<(), Err> {
+        try!(self.first.flush());
+        try!(self.second.flush());
+        Ok(())
     }
 }
 
@@ -448,20 +459,22 @@ impl<T: Read> Read for Take<T> {
 /// An adaptor which will emit all read data to a specified writer as well.
 ///
 /// For more information see `ReadExt::tee`
-pub struct Tee<R, W> {
+pub struct Tee<R, W, Err> {
     reader: R,
     writer: W,
 }
 
-impl<R: Read, W: Write<Err=R::Err>> Read for Tee<R, W>
-    where W::Err: FromError<EndOfFile>
+impl<R: Read, W: Write, Err> Read for Tee<R, W, Err>
+    where Err: FromError<R::Err>,
+          Err: FromError<W::Err>,
+          Err: FromError<EndOfFile>
 {
-    type Err = R::Err;
+    type Err = Err;
 
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, R::Err> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Err> {
         let n = try!(self.reader.read(buf));
         // TODO: what if the write fails? (we read something)
-        try!(self.writer.write_all(&buf[..n]));
+        try!(self.writer.write_all::<Err>(&buf[..n]));
         Ok(n)
     }
 }

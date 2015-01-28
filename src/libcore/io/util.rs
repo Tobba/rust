@@ -40,7 +40,7 @@ pub fn copy<R: Read, W: Write<Err=R::Err>>(r: &mut R, w: &mut W)
             0 => return Ok(written),
             len => len,
         };
-        try!(w.write_all(&buf[..len]));
+        try!(w.write_all::<R::Err>(&buf[..len]));
         written += len as u64;
     }
 }
