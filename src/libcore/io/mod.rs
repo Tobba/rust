@@ -68,8 +68,12 @@ pub trait ReadExt: Read + Sized {
     fn by_ref(&mut self) -> ByRef<Self> {
         ByRef { inner: self }
     }
-    fn map_err<E: FromError<Self::Err>>(self) -> MapErr<Self, E> {
-        MapErr { inner: self }
+    fn map_err<E, F>(self, mapper: F) -> MapErr<Self, E, F>
+    {
+        MapErr { inner: self, mapper: mapper }
+    }
+    fn upcast_err<E: FromError<Self::Err>>(self) -> UpcastErr<Self, E> {
+        UpcastErr { inner: self }
     }
     fn bytes(self) -> Bytes<Self> {
         Bytes { inner: self }
@@ -77,7 +81,10 @@ pub trait ReadExt: Read + Sized {
     fn chars(self) -> Chars<Self> {
         Chars { inner: self }
     }
-    fn chain<R: Read<Err=Self::Err>>(self, next: R) -> Chain<Self, R> {
+    fn chain<R: Read, Err = Self::Err>(self, next: R) -> Chain<Self, R, Err>
+        where Err: FromError<Self::Err>,
+              Err: FromError<R::Err>,
+    {
         Chain { first: self, second: next, done_first: false }
     }
     fn take(self, limit: u64) -> Take<Self> {
@@ -195,8 +202,11 @@ pub trait WriteExt: Write + Sized {
     fn by_ref(&mut self) -> ByRef<Self> {
         ByRef { inner: self }
     }
-    fn map_err<E: FromError<Self::Err>>(self) -> MapErr<Self, E> {
-        MapErr { inner: self }
+    fn map_err<E, F: FnMut(Self::Err) -> E>(self, mapper: F) -> MapErr<Self, E, F> {
+        MapErr { inner: self, mapper: mapper }
+    }
+    fn upcast_err<E: FromError<Self::Err>>(self) -> UpcastErr<Self, E> {
+        UpcastErr { inner: self }
     }
     fn broadcast<W: Write<Err=Self::Err>>(self, other: W) -> Broadcast<Self, W>
         where Self::Err: FromError<EndOfFile>
@@ -345,18 +355,43 @@ impl<T: Write, U: Write<Err=T::Err>> Write for Broadcast<T, U>
 /// Adaptor to transform errors of one type to another.
 ///
 /// For more information see `ReadExt::map_err` or `WriteExt::map_err`.
-pub struct MapErr<T, E> {
+pub struct MapErr<T, E, F> {
+    mapper: F,
     inner: T,
 }
 
-impl<T: Read, E: FromError<T::Err>> Read for MapErr<T, E> {
+impl<T: Read, E, F: FnMut(T::Err) -> E> Read for MapErr<T, E, F> {
+    type Err = E;
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, E> {
+        self.inner.read(buf).map_err(|e| (&mut self.mapper)(e))
+    }
+}
+
+impl<T: Write, E, F: FnMut(T::Err) -> E> Write for MapErr<T, E, F> {
+    type Err = E;
+    fn write(&mut self, buf: &[u8]) -> Result<usize, E> {
+        self.inner.write(buf).map_err(|e| (&mut self.mapper)(e))
+    }
+    fn flush(&mut self) -> Result<(), E> {
+        self.inner.flush().map_err(|e| (&mut self.mapper)(e))
+    }
+}
+
+/// Adaptor to transform errors of one type to another.
+///
+/// For more information see `ReadExt::upcast_err` or `WriteExt::upcast_err`.
+pub struct UpcastErr<T, E> {
+    inner: T,
+}
+
+impl<T: Read, E: FromError<T::Err>> Read for UpcastErr<T, E> {
     type Err = E;
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, E> {
         self.inner.read(buf).map_err(FromError::from_error)
     }
 }
 
-impl<T: Write, E: FromError<T::Err>> Write for MapErr<T, E> {
+impl<T: Write, E: FromError<T::Err>> Write for UpcastErr<T, E> {
     type Err = E;
     fn write(&mut self, buf: &[u8]) -> Result<usize, E> {
         self.inner.write(buf).map_err(FromError::from_error)
@@ -369,22 +404,25 @@ impl<T: Write, E: FromError<T::Err>> Write for MapErr<T, E> {
 /// Adaptor to chain together two instances of `Read`.
 ///
 /// For more information, see `ReadExt::chain`.
-pub struct Chain<T, U> {
+pub struct Chain<T, U, Err> {
     first: T,
     second: U,
     done_first: bool,
 }
 
-impl<T: Read, U: Read<Err=T::Err>> Read for Chain<T, U> {
-    type Err = T::Err;
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, T::Err> {
+impl<Err, T: Read, U: Read> Read for Chain<T, U, Err>
+    where Err: FromError<T::Err>,
+          Err: FromError<U::Err>,
+{
+    type Err = Err;
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Err> {
         if !self.done_first {
             match try!(self.first.read(buf)) {
                 0 => { self.done_first = true; }
                 n => return Ok(n),
             }
         }
-        self.second.read(buf)
+        self.second.read(buf).map_err(FromError::from_error)
     }
 }
 
