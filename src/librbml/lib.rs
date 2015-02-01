@@ -705,25 +705,10 @@ pub mod writer {
 
     pub type EncodeResult<W, S> = Result<(), EncodeError<W, S>>;
     
-    pub struct WriteError<T>(T);
-    pub struct SeekError<T>(T);
-    
     pub enum EncodeError<W, S> {
         WriteError(W),
         SeekError(S),
         EndOfFile
-    }
-    
-    impl<W, S> FromError<WriteError<W>> for EncodeError<W, S> {
-        fn from_error(error: WriteError<W>) -> EncodeError<W, S> {
-            EncodeError::WriteError(error.0)
-        }
-    }
-    
-    impl<W, S> FromError<SeekError<S>> for EncodeError<W, S> {
-        fn from_error(error: SeekError<S>) -> EncodeError<W, S> {
-            EncodeError::SeekError(error.0)
-        }
     }
     
     impl<W, S> FromError<io::EndOfFile> for EncodeError<W, S> {
@@ -739,7 +724,7 @@ pub mod writer {
     }
 
     fn write_sized_vuint<W: Write+Seek>(w: &mut W, n: uint, size: uint) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
-        let mut w = w.map_err(|err| WriteError(err));
+        let mut w = w.map_err(|err| EncodeError::WriteError(err));
         match size {
             1u => w.write_all(&[0x80u8 | (n as u8)]),
             2u => w.write_all(&[0x40u8 | ((n >> 8_u) as u8), n as u8]),
@@ -791,18 +776,18 @@ pub mod writer {
             try!(write_vuint(self.writer, tag_id));
 
             // Write a placeholder four-byte size.
-            self.size_positions.push(try!(self.writer.seek(SeekPos::FromCur(0)).map_err(|err| SeekError(err))) as uint);
+            self.size_positions.push(try!(self.writer.seek(SeekPos::FromCur(0)).map_err(|err| EncodeError::SeekError(err))) as uint);
             let zeroes: &[u8] = &[0u8, 0u8, 0u8, 0u8];
-            self.writer.map_err(|err| WriteError(err)).write_all(zeroes)
+            self.writer.map_err(|err| EncodeError::WriteError(err)).write_all(zeroes)
         }
 
         pub fn end_tag(&mut self) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
             let last_size_pos = self.size_positions.pop().unwrap();
-            let cur_pos = try!(self.writer.seek(SeekPos::FromCur(0)).map_err(|err| SeekError(err)));
-            try!(self.writer.seek(SeekPos::FromStart(last_size_pos as u64)).map_err(|err| SeekError(err)));
+            let cur_pos = try!(self.writer.seek(SeekPos::FromCur(0)).map_err(|err| EncodeError::SeekError(err)));
+            try!(self.writer.seek(SeekPos::FromStart(last_size_pos as u64)).map_err(|err| EncodeError::SeekError(err)));
             let size = cur_pos as uint - last_size_pos - 4;
             try!(write_sized_vuint(self.writer, size, 4u));
-            try!(self.writer.seek(SeekPos::FromStart(cur_pos)).map_err(|err| SeekError(err)));
+            try!(self.writer.seek(SeekPos::FromStart(cur_pos)).map_err(|err| EncodeError::SeekError(err)));
 
             debug!("End tag (size = {:?})", size);
             Ok(())
@@ -819,7 +804,7 @@ pub mod writer {
         pub fn wr_tagged_bytes(&mut self, tag_id: uint, b: &[u8]) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
             try!(write_vuint(self.writer, tag_id));
             try!(write_vuint(self.writer, b.len()));
-            self.writer.map_err(|err| WriteError(err)).write_all(b)
+            self.writer.map_err(|err| EncodeError::WriteError(err)).write_all(b)
         }
 
         pub fn wr_tagged_u64(&mut self, tag_id: uint, v: u64) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
@@ -872,12 +857,12 @@ pub mod writer {
 
         pub fn wr_bytes(&mut self, b: &[u8]) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
             debug!("Write {:?} bytes", b.len());
-            self.writer.map_err(|err| WriteError(err)).write_all(b)
+            self.writer.map_err(|err| EncodeError::WriteError(err)).write_all(b)
         }
 
         pub fn wr_str(&mut self, s: &str) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
             debug!("Write str: {:?}", s);
-            self.writer.map_err(|err| WriteError(err)).write_all(s.as_bytes())
+            self.writer.map_err(|err| EncodeError::WriteError(err)).write_all(s.as_bytes())
         }
     }
 
