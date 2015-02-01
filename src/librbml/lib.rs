@@ -693,7 +693,7 @@ pub mod writer {
     use std::io::{SeekPos, Write, Seek, WriteExt};
     use std::io;
     use std::mem;
-	use std::error::FromError;
+    use std::error::FromError;
 
     use super::{ EsVec, EsMap, EsEnum, EsVecLen, EsVecElt, EsMapLen, EsMapKey,
         EsEnumVid, EsU64, EsU32, EsU16, EsU8, EsInt, EsI64, EsI32, EsI16, EsI8,
@@ -704,33 +704,33 @@ pub mod writer {
 
 
     pub type EncodeResult<W, S> = Result<(), EncodeError<W, S>>;
-	
-	pub struct WriteError<T>(T);
-	pub struct SeekError<T>(T);
-	
-	pub enum EncodeError<W, S> {
-		WriteError(W),
-		SeekError(S),
-		EndOfFile
-	}
-	
-	impl<W, S> FromError<WriteError<W>> for EncodeError<W, S> {
-		fn from_error(error: WriteError<W>) -> EncodeError<W, S> {
-			EncodeError::WriteError(error.0)
-		}
-	}
-	
-	impl<W, S> FromError<SeekError<S>> for EncodeError<W, S> {
-		fn from_error(error: SeekError<S>) -> EncodeError<W, S> {
-			EncodeError::SeekError(error.0)
-		}
-	}
-	
-	impl<W, S> FromError<io::EndOfFile> for EncodeError<W, S> {
-		fn from_error(_: io::EndOfFile) -> EncodeError<W, S> {
-			EncodeError::EndOfFile
-		}
-	}
+    
+    pub struct WriteError<T>(T);
+    pub struct SeekError<T>(T);
+    
+    pub enum EncodeError<W, S> {
+        WriteError(W),
+        SeekError(S),
+        EndOfFile
+    }
+    
+    impl<W, S> FromError<WriteError<W>> for EncodeError<W, S> {
+        fn from_error(error: WriteError<W>) -> EncodeError<W, S> {
+            EncodeError::WriteError(error.0)
+        }
+    }
+    
+    impl<W, S> FromError<SeekError<S>> for EncodeError<W, S> {
+        fn from_error(error: SeekError<S>) -> EncodeError<W, S> {
+            EncodeError::SeekError(error.0)
+        }
+    }
+    
+    impl<W, S> FromError<io::EndOfFile> for EncodeError<W, S> {
+        fn from_error(_: io::EndOfFile) -> EncodeError<W, S> {
+            EncodeError::EndOfFile
+        }
+    }
 
     // rbml writing
     pub struct Encoder<'a, W:'a> {
@@ -740,7 +740,7 @@ pub mod writer {
 
     fn write_sized_vuint<W: Write+Seek>(w: &mut W, n: uint, size: uint) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
         let mut w = w.map_err(|err| WriteError(err));
-		match size {
+        match size {
             1u => w.write_all(&[0x80u8 | (n as u8)]),
             2u => w.write_all(&[0x40u8 | ((n >> 8_u) as u8), n as u8]),
             3u => w.write_all(&[0x20u8 | ((n >> 16_u) as u8), (n >> 8_u) as u8,
@@ -819,7 +819,7 @@ pub mod writer {
         pub fn wr_tagged_bytes(&mut self, tag_id: uint, b: &[u8]) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
             try!(write_vuint(self.writer, tag_id));
             try!(write_vuint(self.writer, b.len()));
-			self.writer.map_err(|err| WriteError(err)).write_all(b)
+            self.writer.map_err(|err| WriteError(err)).write_all(b)
         }
 
         pub fn wr_tagged_u64(&mut self, tag_id: uint, v: u64) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
@@ -872,12 +872,12 @@ pub mod writer {
 
         pub fn wr_bytes(&mut self, b: &[u8]) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
             debug!("Write {:?} bytes", b.len());
-			self.writer.map_err(|err| WriteError(err)).write_all(b)
+            self.writer.map_err(|err| WriteError(err)).write_all(b)
         }
 
         pub fn wr_str(&mut self, s: &str) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
             debug!("Write str: {:?}", s);
-			self.writer.map_err(|err| WriteError(err)).write_all(s.as_bytes())
+            self.writer.map_err(|err| WriteError(err)).write_all(s.as_bytes())
         }
     }
 
