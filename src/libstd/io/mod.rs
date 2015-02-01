@@ -14,9 +14,8 @@
 //! > development. At this time it is still recommended to use the `old_io`
 //! > module while the details of this module shake out.
 
-#![unstable = "this new I/O module is still under active deveopment and APIs \
-               are subject to tweaks fairly regularly"]
-
+#![unstable(feature = "io", reason = "this new I/O module is still under active deveopment and APIs \
+               are subject to tweaks fairly regularly")]
 use core::prelude::*;
 
 use borrow::ByRef;
@@ -122,7 +121,7 @@ pub trait ReadExt: Read + Sized {
     ///
     /// Currently this adaptor will discard intermediate data read, and should
     /// be avoided if this is not desired.
-    #[unstable = "the error semantics of the returned structure are uncertain"]
+    #[unstable(feature = "io", reason = "the error semantics of the returned structure are uncertain")]
     fn chars(self) -> Chars<Self> {
         core_io::ReadExt::chars(self)
     }
@@ -156,7 +155,7 @@ pub trait ReadExt: Read + Sized {
     /// Whenever the returned `Read` instance is read it will write the read
     /// data to `out`. The current semantics of this implementation imply that
     /// a `write` error will not report how much data was initially read.
-    #[unstable = "the error semantics of the returned structure are uncertain"]
+    #[unstable(feature = "io", reason = "the error semantics of the returned structure are uncertain")]
     fn tee<W: Write, Err=Self::Err>(self, out: W) -> Tee<Self, W, Err>
         where Err: FromError<Self::Err>,
               Err: FromError<W::Err>,
@@ -181,7 +180,7 @@ pub trait WriteExt: Write + Sized {
     /// # Errors
     ///
     /// This function will return the first error that `write` returns.
-    #[unstable = "this function loses information about intermediate writes"]
+	#[unstable(feature = "io", reason = "this function loses information about intermediate writes")]
     fn write_all<Err=Self::Err>(&mut self, buf: &[u8]) -> Result<(), Err>
         where Err: FromError<Self::Err>,
 		      Err: FromError<EndOfFile>
@@ -203,7 +202,7 @@ pub trait WriteExt: Write + Sized {
     /// # Errors
     ///
     /// This function will return any I/O error reported while formatting.
-    #[unstable = "this function loses information about intermediate writes"]
+    #[unstable(feature = "io", reason = "this function loses information about intermediate writes")]
     fn write_fmt(&mut self, fmt: fmt::Arguments) -> Result<(), Self::Err>
         where Self::Err: FromError<EndOfFile>
     {
@@ -234,7 +233,7 @@ pub trait WriteExt: Write + Sized {
     /// implementation do not precisely track where errors happen. For example
     /// an error on the second call to `write` will not report that the first
     /// call to `write` succeeded.
-    #[unstable = "the error semantics of the returned structure are uncertain"]
+	#[unstable(feature = "io", reason = "the error semantics of the returned structure are uncertain")]
     fn broadcast<W: Write, Err=Self::Err>(self, other: W) -> Broadcast<Self, W, Err>
         where Err: FromError<Self::Err>,
               Err: FromError<W::Err>,

@@ -28,7 +28,7 @@ use error::FromError;
 ///
 /// This function will return an error immediately if any call to `read` or
 /// `write` returns an error.
-#[unstable = "this function will discard intermediate data"]
+#[unstable(feature = "io", reason = "this function will discard intermediate data")]
 pub fn copy<R: Read, W: Write<Err=R::Err>>(r: &mut R, w: &mut W)
                                            -> Result<u64, R::Err>
     where R::Err: FromError<EndOfFile>
