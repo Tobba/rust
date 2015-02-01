@@ -708,7 +708,8 @@ pub mod writer {
     pub enum EncodeError<W, S> {
         WriteError(W),
         SeekError(S),
-        EndOfFile
+        EndOfFile,
+		IntTooBig(uint)
     }
     
     impl<W, S> FromError<io::EndOfFile> for EncodeError<W, S> {
@@ -732,11 +733,7 @@ pub mod writer {
                             n as u8]),
             4u => w.write_all(&[0x10u8 | ((n >> 24_u) as u8), (n >> 16_u) as u8,
                             (n >> 8_u) as u8, n as u8]),
-            _ => /*Err(old_io::IoError {
-                kind: old_io::OtherIoError,
-                desc: "int too big",
-                detail: Some(format!("{}", n))
-            })*/loop { }
+            _ => Err(EncodeError::IntTooBig(n))
         }
     }
 
@@ -745,11 +742,7 @@ pub mod writer {
         if n < 0x4000_u { return write_sized_vuint(w, n, 2u); }
         if n < 0x200000_u { return write_sized_vuint(w, n, 3u); }
         if n < 0x10000000_u { return write_sized_vuint(w, n, 4u); }
-        /*Err(old_io::IoError {
-            kind: old_io::OtherIoError,
-            desc: "int too big",
-            detail: Some(format!("{}", n))
-        })*/loop { }
+       Err(EncodeError::IntTooBig(n))
     }
 
     // FIXME (#2741): Provide a function to write the standard rbml header.
