@@ -97,8 +97,8 @@ pub trait ReadExt: Read + Sized {
     ///
     /// The returned reader will transform errors of type `Self::Err` to `E`
     /// via the `FromError` trait.
-    fn map_err<E: FromError<Self::Err>>(self) -> MapErr<Self, E> {
-        core_io::ReadExt::map_err(self)
+    fn map_err<Err, F: FnMut(Self::Err) -> Err>(self, mapper: F) -> MapErr<Self, Err, F> {
+        core_io::ReadExt::map_err(self, mapper)
     }
 
     /// Transform this `Read` instance to an `Iterator` over its bytes.
@@ -132,7 +132,11 @@ pub trait ReadExt: Read + Sized {
     /// The returned instance of `Read` will yield all this object's bytes
     /// until EOF is reached. Afterwards the bytes of `next` will be yielded
     /// infinitely.
-    fn chain<R: Read<Err=Self::Err>>(self, next: R) -> Chain<Self, R> {
+    fn chain<R: Read, Err=Self::Err>(self, next: R) -> Chain<Self, R, Err>
+	where Err: FromError<Self::Err>,
+		  Err: FromError<R::Err>
+    {
+		  
         core_io::ReadExt::chain(self, next)
     }
 
@@ -153,8 +157,10 @@ pub trait ReadExt: Read + Sized {
     /// data to `out`. The current semantics of this implementation imply that
     /// a `write` error will not report how much data was initially read.
     #[unstable = "the error semantics of the returned structure are uncertain"]
-    fn tee<W: Write<Err=Self::Err>>(self, out: W) -> Tee<Self, W>
-        where W::Err: FromError<EndOfFile>
+    fn tee<W: Write, Err=Self::Err>(self, out: W) -> Tee<Self, W, Err>
+        where Err: FromError<Self::Err>,
+              Err: FromError<W::Err>,
+              Err: FromError<EndOfFile>
     {
         core_io::ReadExt::tee(self, out)
     }
@@ -215,8 +221,8 @@ pub trait WriteExt: Write + Sized {
     ///
     /// The returned writer will transform errors of type `Self::Err` to `E`
     /// via the `FromError` trait.
-    fn map_err<E: FromError<Self::Err>>(self) -> MapErr<Self, E> {
-        core_io::WriteExt::map_err(self)
+    fn map_err<Err, F: FnMut(Self::Err) -> Err>(self, mapper: F) -> MapErr<Self, Err, F> {
+        core_io::WriteExt::map_err(self, mapper)
     }
 
     /// Creates a new writer which will write all data to both this writer and
@@ -228,8 +234,10 @@ pub trait WriteExt: Write + Sized {
     /// an error on the second call to `write` will not report that the first
     /// call to `write` succeeded.
     #[unstable = "the error semantics of the returned structure are uncertain"]
-    fn broadcast<W: Write<Err=Self::Err>>(self, other: W) -> Broadcast<Self, W>
-        where Self::Err: FromError<EndOfFile>
+    fn broadcast<W: Write, Err=Self::Err>(self, other: W) -> Broadcast<Self, W, Err>
+        where Err: FromError<Self::Err>,
+              Err: FromError<W::Err>,
+              Err: FromError<EndOfFile>
     {
         core_io::WriteExt::broadcast(self, other)
     }
