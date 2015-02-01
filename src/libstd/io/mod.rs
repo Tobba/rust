@@ -182,8 +182,9 @@ pub trait WriteExt: Write + Sized {
     ///
     /// This function will return the first error that `write` returns.
     #[unstable = "this function loses information about intermediate writes"]
-    fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Err>
-        where Self::Err: FromError<EndOfFile>
+    fn write_all<Err=Self::Err>(&mut self, buf: &[u8]) -> Result<(), Err>
+        where Err: FromError<Self::Err>,
+		      Err: FromError<EndOfFile>
     {
         core_io::WriteExt::write_all(self, buf)
     }
