@@ -703,17 +703,19 @@ pub mod writer {
     use serialize;
 
 
-    pub type EncodeResult<W, S> = Result<(), EncodeError<W, S>>;
+    pub type EncodeResult<W> = Result<(), EncodeError<W>>;
     
-    pub enum EncodeError<W, S> {
-        WriteError(W),
-        SeekError(S),
+    pub enum EncodeError<W: Write+Seek> {
+        WriteError(<W as Write>::Err),
+        SeekError(<W as Seek>::Err),
         EndOfFile,
-		IntTooBig(uint)
+        IntTooBig(uint)
     }
     
-    impl<W, S> FromError<io::EndOfFile> for EncodeError<W, S> {
-        fn from_error(_: io::EndOfFile) -> EncodeError<W, S> {
+    impl<W> FromError<io::EndOfFile> for EncodeError<W>
+        where W: Write+Seek,
+    {
+        fn from_error(_: io::EndOfFile) -> EncodeError<W> {
             EncodeError::EndOfFile
         }
     }
@@ -724,7 +726,7 @@ pub mod writer {
         size_positions: Vec<uint>,
     }
 
-    fn write_sized_vuint<W: Write+Seek>(w: &mut W, n: uint, size: uint) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+    fn write_sized_vuint<W: Write+Seek>(w: &mut W, n: uint, size: uint) -> EncodeResult<W> {
         let mut w = w.map_err(|err| EncodeError::WriteError(err));
         match size {
             1u => w.write_all(&[0x80u8 | (n as u8)]),
@@ -737,7 +739,7 @@ pub mod writer {
         }
     }
 
-    fn write_vuint<W: Write+Seek>(w: &mut W, n: uint) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+    fn write_vuint<W: Write+Seek>(w: &mut W, n: uint) -> EncodeResult<W> {
         if n < 0x7f_u { return write_sized_vuint(w, n, 1u); }
         if n < 0x4000_u { return write_sized_vuint(w, n, 2u); }
         if n < 0x200000_u { return write_sized_vuint(w, n, 3u); }
@@ -762,7 +764,7 @@ pub mod writer {
             }
         }
 
-        pub fn start_tag(&mut self, tag_id: uint) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        pub fn start_tag(&mut self, tag_id: uint) -> EncodeResult<W> {
             debug!("Start tag {:?}", tag_id);
 
             // Write the enum ID:
@@ -774,7 +776,7 @@ pub mod writer {
             self.writer.map_err(|err| EncodeError::WriteError(err)).write_all(zeroes)
         }
 
-        pub fn end_tag(&mut self) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        pub fn end_tag(&mut self) -> EncodeResult<W> {
             let last_size_pos = self.size_positions.pop().unwrap();
             let cur_pos = try!(self.writer.seek(SeekPos::FromCur(0)).map_err(|err| EncodeError::SeekError(err)));
             try!(self.writer.seek(SeekPos::FromStart(last_size_pos as u64)).map_err(|err| EncodeError::SeekError(err)));
@@ -786,74 +788,74 @@ pub mod writer {
             Ok(())
         }
 
-        pub fn wr_tag<F>(&mut self, tag_id: uint, blk: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce() -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+        pub fn wr_tag<F>(&mut self, tag_id: uint, blk: F) -> EncodeResult<W> where
+            F: FnOnce() -> EncodeResult<W>,
         {
             try!(self.start_tag(tag_id));
             try!(blk());
             self.end_tag()
         }
 
-        pub fn wr_tagged_bytes(&mut self, tag_id: uint, b: &[u8]) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        pub fn wr_tagged_bytes(&mut self, tag_id: uint, b: &[u8]) -> EncodeResult<W> {
             try!(write_vuint(self.writer, tag_id));
             try!(write_vuint(self.writer, b.len()));
             self.writer.map_err(|err| EncodeError::WriteError(err)).write_all(b)
         }
 
-        pub fn wr_tagged_u64(&mut self, tag_id: uint, v: u64) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        pub fn wr_tagged_u64(&mut self, tag_id: uint, v: u64) -> EncodeResult<W> {
             u64_to_be_bytes(v, 8u, |v| {
                 self.wr_tagged_bytes(tag_id, v)
             })
         }
 
-        pub fn wr_tagged_u32(&mut self, tag_id: uint, v: u32)  -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        pub fn wr_tagged_u32(&mut self, tag_id: uint, v: u32)  -> EncodeResult<W> {
             u64_to_be_bytes(v as u64, 4u, |v| {
                 self.wr_tagged_bytes(tag_id, v)
             })
         }
 
-        pub fn wr_tagged_u16(&mut self, tag_id: uint, v: u16) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        pub fn wr_tagged_u16(&mut self, tag_id: uint, v: u16) -> EncodeResult<W> {
             u64_to_be_bytes(v as u64, 2u, |v| {
                 self.wr_tagged_bytes(tag_id, v)
             })
         }
 
-        pub fn wr_tagged_u8(&mut self, tag_id: uint, v: u8) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        pub fn wr_tagged_u8(&mut self, tag_id: uint, v: u8) -> EncodeResult<W> {
             self.wr_tagged_bytes(tag_id, &[v])
         }
 
-        pub fn wr_tagged_i64(&mut self, tag_id: uint, v: i64) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        pub fn wr_tagged_i64(&mut self, tag_id: uint, v: i64) -> EncodeResult<W> {
             u64_to_be_bytes(v as u64, 8u, |v| {
                 self.wr_tagged_bytes(tag_id, v)
             })
         }
 
-        pub fn wr_tagged_i32(&mut self, tag_id: uint, v: i32) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        pub fn wr_tagged_i32(&mut self, tag_id: uint, v: i32) -> EncodeResult<W> {
             u64_to_be_bytes(v as u64, 4u, |v| {
                 self.wr_tagged_bytes(tag_id, v)
             })
         }
 
-        pub fn wr_tagged_i16(&mut self, tag_id: uint, v: i16) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        pub fn wr_tagged_i16(&mut self, tag_id: uint, v: i16) -> EncodeResult<W> {
             u64_to_be_bytes(v as u64, 2u, |v| {
                 self.wr_tagged_bytes(tag_id, v)
             })
         }
 
-        pub fn wr_tagged_i8(&mut self, tag_id: uint, v: i8) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        pub fn wr_tagged_i8(&mut self, tag_id: uint, v: i8) -> EncodeResult<W> {
             self.wr_tagged_bytes(tag_id, &[v as u8])
         }
 
-        pub fn wr_tagged_str(&mut self, tag_id: uint, v: &str) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        pub fn wr_tagged_str(&mut self, tag_id: uint, v: &str) -> EncodeResult<W> {
             self.wr_tagged_bytes(tag_id, v.as_bytes())
         }
 
-        pub fn wr_bytes(&mut self, b: &[u8]) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        pub fn wr_bytes(&mut self, b: &[u8]) -> EncodeResult<W> {
             debug!("Write {:?} bytes", b.len());
             self.writer.map_err(|err| EncodeError::WriteError(err)).write_all(b)
         }
 
-        pub fn wr_str(&mut self, s: &str) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        pub fn wr_str(&mut self, s: &str) -> EncodeResult<W> {
             debug!("Write str: {:?}", s);
             self.writer.map_err(|err| EncodeError::WriteError(err)).write_all(s.as_bytes())
         }
@@ -871,12 +873,12 @@ pub mod writer {
 
     impl<'a, W: Write + Seek> Encoder<'a, W> {
         // used internally to emit things like the vector length and so on
-        fn _emit_tagged_uint(&mut self, t: EbmlEncoderTag, v: uint) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn _emit_tagged_uint(&mut self, t: EbmlEncoderTag, v: uint) -> EncodeResult<W> {
             assert!(v <= 0xFFFF_FFFF_u);
             self.wr_tagged_u32(t as uint, v as u32)
         }
 
-        fn _emit_label(&mut self, label: &str) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn _emit_label(&mut self, label: &str) -> EncodeResult<W> {
             // There are various strings that we have access to, such as
             // the name of a record field, which do not actually appear in
             // the encoded EBML (normally).  This is just for
@@ -887,8 +889,8 @@ pub mod writer {
             else { Ok(()) }
         }
 
-        pub fn emit_opaque<F>(&mut self, f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+        pub fn emit_opaque<F>(&mut self, f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<W>) -> EncodeResult<W>,
         {
             try!(self.start_tag(EsOpaque as uint));
             try!(f(self));
@@ -897,66 +899,66 @@ pub mod writer {
     }
 
     impl<'a, W: Write + Seek> serialize::Encoder for Encoder<'a, W> {
-        type Error = EncodeError<<W as Write>::Err, <W as Seek>::Err>;
+        type Error = EncodeError<W>;
 
-        fn emit_nil(&mut self) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn emit_nil(&mut self) -> EncodeResult<W> {
             Ok(())
         }
 
-        fn emit_uint(&mut self, v: uint) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn emit_uint(&mut self, v: uint) -> EncodeResult<W> {
             self.wr_tagged_u64(EsUint as uint, v as u64)
         }
-        fn emit_u64(&mut self, v: u64) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn emit_u64(&mut self, v: u64) -> EncodeResult<W> {
             self.wr_tagged_u64(EsU64 as uint, v)
         }
-        fn emit_u32(&mut self, v: u32) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn emit_u32(&mut self, v: u32) -> EncodeResult<W> {
             self.wr_tagged_u32(EsU32 as uint, v)
         }
-        fn emit_u16(&mut self, v: u16) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn emit_u16(&mut self, v: u16) -> EncodeResult<W> {
             self.wr_tagged_u16(EsU16 as uint, v)
         }
-        fn emit_u8(&mut self, v: u8) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn emit_u8(&mut self, v: u8) -> EncodeResult<W> {
             self.wr_tagged_u8(EsU8 as uint, v)
         }
 
-        fn emit_int(&mut self, v: int) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn emit_int(&mut self, v: int) -> EncodeResult<W> {
             self.wr_tagged_i64(EsInt as uint, v as i64)
         }
-        fn emit_i64(&mut self, v: i64) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn emit_i64(&mut self, v: i64) -> EncodeResult<W> {
             self.wr_tagged_i64(EsI64 as uint, v)
         }
-        fn emit_i32(&mut self, v: i32) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn emit_i32(&mut self, v: i32) -> EncodeResult<W> {
             self.wr_tagged_i32(EsI32 as uint, v)
         }
-        fn emit_i16(&mut self, v: i16) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn emit_i16(&mut self, v: i16) -> EncodeResult<W> {
             self.wr_tagged_i16(EsI16 as uint, v)
         }
-        fn emit_i8(&mut self, v: i8) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn emit_i8(&mut self, v: i8) -> EncodeResult<W> {
             self.wr_tagged_i8(EsI8 as uint, v)
         }
 
-        fn emit_bool(&mut self, v: bool) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn emit_bool(&mut self, v: bool) -> EncodeResult<W> {
             self.wr_tagged_u8(EsBool as uint, v as u8)
         }
 
-        fn emit_f64(&mut self, v: f64) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn emit_f64(&mut self, v: f64) -> EncodeResult<W> {
             let bits = unsafe { mem::transmute(v) };
             self.wr_tagged_u64(EsF64 as uint, bits)
         }
-        fn emit_f32(&mut self, v: f32) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn emit_f32(&mut self, v: f32) -> EncodeResult<W> {
             let bits = unsafe { mem::transmute(v) };
             self.wr_tagged_u32(EsF32 as uint, bits)
         }
-        fn emit_char(&mut self, v: char) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn emit_char(&mut self, v: char) -> EncodeResult<W> {
             self.wr_tagged_u32(EsChar as uint, v as u32)
         }
 
-        fn emit_str(&mut self, v: &str) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn emit_str(&mut self, v: &str) -> EncodeResult<W> {
             self.wr_tagged_str(EsStr as uint, v)
         }
 
-        fn emit_enum<F>(&mut self, name: &str, f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+        fn emit_enum<F>(&mut self, name: &str, f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
             try!(self._emit_label(name));
             try!(self.start_tag(EsEnum as uint));
@@ -968,8 +970,8 @@ pub mod writer {
                                 _: &str,
                                 v_id: uint,
                                 _: uint,
-                                f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+                                f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
             try!(self._emit_tagged_uint(EsEnumVid, v_id));
             try!(self.start_tag(EsEnumBody as uint));
@@ -977,8 +979,8 @@ pub mod writer {
             self.end_tag()
         }
 
-        fn emit_enum_variant_arg<F>(&mut self, _: uint, f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+        fn emit_enum_variant_arg<F>(&mut self, _: uint, f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
             f(self)
         }
@@ -987,8 +989,8 @@ pub mod writer {
                                        v_name: &str,
                                        v_id: uint,
                                        cnt: uint,
-                                       f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+                                       f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
             self.emit_enum_variant(v_name, v_id, cnt, f)
         }
@@ -996,64 +998,64 @@ pub mod writer {
         fn emit_enum_struct_variant_field<F>(&mut self,
                                              _: &str,
                                              idx: uint,
-                                             f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+                                             f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
             self.emit_enum_variant_arg(idx, f)
         }
 
-        fn emit_struct<F>(&mut self, _: &str, _len: uint, f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+        fn emit_struct<F>(&mut self, _: &str, _len: uint, f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
             f(self)
         }
 
-        fn emit_struct_field<F>(&mut self, name: &str, _: uint, f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+        fn emit_struct_field<F>(&mut self, name: &str, _: uint, f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
             try!(self._emit_label(name));
             f(self)
         }
 
-        fn emit_tuple<F>(&mut self, len: uint, f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+        fn emit_tuple<F>(&mut self, len: uint, f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
             self.emit_seq(len, f)
         }
-        fn emit_tuple_arg<F>(&mut self, idx: uint, f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+        fn emit_tuple_arg<F>(&mut self, idx: uint, f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
             self.emit_seq_elt(idx, f)
         }
 
-        fn emit_tuple_struct<F>(&mut self, _: &str, len: uint, f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+        fn emit_tuple_struct<F>(&mut self, _: &str, len: uint, f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
             self.emit_seq(len, f)
         }
-        fn emit_tuple_struct_arg<F>(&mut self, idx: uint, f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+        fn emit_tuple_struct_arg<F>(&mut self, idx: uint, f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
             self.emit_seq_elt(idx, f)
         }
 
-        fn emit_option<F>(&mut self, f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+        fn emit_option<F>(&mut self, f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
             self.emit_enum("Option", f)
         }
-        fn emit_option_none(&mut self) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> {
+        fn emit_option_none(&mut self) -> EncodeResult<W> {
             self.emit_enum_variant("None", 0, 0, |_| Ok(()))
         }
-        fn emit_option_some<F>(&mut self, f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+        fn emit_option_some<F>(&mut self, f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
 
             self.emit_enum_variant("Some", 1, 1, f)
         }
 
-        fn emit_seq<F>(&mut self, len: uint, f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+        fn emit_seq<F>(&mut self, len: uint, f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
 
             try!(self.start_tag(EsVec as uint));
@@ -1062,8 +1064,8 @@ pub mod writer {
             self.end_tag()
         }
 
-        fn emit_seq_elt<F>(&mut self, _idx: uint, f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+        fn emit_seq_elt<F>(&mut self, _idx: uint, f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
 
             try!(self.start_tag(EsVecElt as uint));
@@ -1071,8 +1073,8 @@ pub mod writer {
             self.end_tag()
         }
 
-        fn emit_map<F>(&mut self, len: uint, f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+        fn emit_map<F>(&mut self, len: uint, f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
 
             try!(self.start_tag(EsMap as uint));
@@ -1081,8 +1083,8 @@ pub mod writer {
             self.end_tag()
         }
 
-        fn emit_map_elt_key<F>(&mut self, _idx: uint, f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+        fn emit_map_elt_key<F>(&mut self, _idx: uint, f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
 
             try!(self.start_tag(EsMapKey as uint));
@@ -1090,8 +1092,8 @@ pub mod writer {
             self.end_tag()
         }
 
-        fn emit_map_elt_val<F>(&mut self, _idx: uint, f: F) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err> where
-            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<<W as Write>::Err, <W as Seek>::Err>,
+        fn emit_map_elt_val<F>(&mut self, _idx: uint, f: F) -> EncodeResult<W> where
+            F: FnOnce(&mut Encoder<'a, W>) -> EncodeResult<W>,
         {
             try!(self.start_tag(EsMapVal as uint));
             try!(f(self));
